@@ -51,36 +51,25 @@ export class HairstyleService {
   }
 
   async generateImage(
-    base64Source: string,
+    sourceUrl: string,
     styleDescription: string,
     color: string,
   ) {
-    // 1️⃣ Normalize base64 (resize + clean alpha)
-    const normalized = await this.normalizeBase64Image(base64Source);
-
-    // 2️⃣ Save locally and expose via ngrok
-    const sourceUrl = this.saveBase64AsFile(normalized);
-
-    // 3️⃣ Prepare input for Replicate
+    // 1️⃣ Prepare input for Replicate
     const input = {
-      image: sourceUrl,
+      image: sourceUrl, // ✅ Cloudinary public URL
       editing_type: 'both',
       hairstyle_description: styleDescription,
       color_description: color,
     };
 
     if (!process.env.REPLICATE_API_TOKEN) {
-      console.error(
+      throw new Error(
         '[generateImage] ❌ Missing REPLICATE_API_TOKEN env variable!',
-      );
-    } else {
-      console.log(
-        '[generateImage] using token (length only for safety):',
-        process.env.REPLICATE_API_TOKEN.length,
       );
     }
 
-    // 4️⃣ Create prediction
+    // 2️⃣ Create prediction
     const response = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
       headers: {
@@ -95,7 +84,7 @@ export class HairstyleService {
     });
 
     const prediction: any = await response.json();
-    console.log('prediction:', prediction);
+    console.log('prediction created:', prediction);
 
     if (!prediction.urls?.get) {
       throw new Error(
@@ -103,7 +92,7 @@ export class HairstyleService {
       );
     }
 
-    // 5️⃣ Poll until finished
+    // 3️⃣ Poll until finished
     let result: any = prediction;
     while (result.status !== 'succeeded' && result.status !== 'failed') {
       await new Promise((r) => setTimeout(r, 2000));
@@ -113,7 +102,7 @@ export class HairstyleService {
       result = await pollRes.json();
     }
 
-    // 6️⃣ Save or return result
+    // 4️⃣ Return result
     if (result.status === 'succeeded') {
       let urls: string[] = [];
 
@@ -127,18 +116,7 @@ export class HairstyleService {
         );
       }
 
-      // Save first result locally with unique filename
-      const uniqueName = `output-${randomUUID()}.png`;
-      const outputPath = path.join(__dirname, '..', '..', 'public', uniqueName);
-
-      const imageResp = await fetch(urls[0]);
-      const buffer = await imageResp.arrayBuffer();
-      await writeFile(outputPath, Buffer.from(buffer));
-
-      return {
-        replicateUrls: urls,
-        localUrl: `${this.ngrokUrl}/public/${uniqueName}`,
-      };
+      return { replicateUrls: urls }; // ✅ Only return Replicate URLs now
     } else {
       throw new Error('Prediction failed: ' + JSON.stringify(result));
     }
