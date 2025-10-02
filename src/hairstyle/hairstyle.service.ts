@@ -69,6 +69,17 @@ export class HairstyleService {
       color_description: color,
     };
 
+    if (!process.env.REPLICATE_API_TOKEN) {
+      console.error(
+        '[generateImage] ❌ Missing REPLICATE_API_TOKEN env variable!',
+      );
+    } else {
+      console.log(
+        '[generateImage] using token (length only for safety):',
+        process.env.REPLICATE_API_TOKEN.length,
+      );
+    }
+
     // 4️⃣ Create prediction
     const response = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
